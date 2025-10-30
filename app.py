@@ -4,7 +4,7 @@ from PIL import Image
 from io import BytesIO
 
 # Load your Hugging Face API token from Streamlit secrets
-API_TOKEN = st.secrets["huggingface"]["api_token"]
+API_TOKEN = "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"
 
 HEADSHOT_MODEL = "valiantcat/Qwen-Image-Edit-MeiTu"  # Image-to-image beautify
 BANNER_MODEL = "stabilityai/stable-diffusion-2"      # Text-to-image banner generation
@@ -65,3 +65,4 @@ with tab2:
                 banner_img = query_text_to_image(prompt.strip())
                 if banner_img:
                     st.image(banner_img, caption="Generated LinkedIn Banner", use_column_width=True)
+
