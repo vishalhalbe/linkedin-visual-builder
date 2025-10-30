@@ -4,7 +4,7 @@ from huggingface_hub import InferenceClient
 from PIL import Image
 from io import BytesIO
 
-# ------------------- Hugging Face API Setup -------------------
+# ---------------- Hugging Face API Setup ----------------
 HF_TOKEN = os.environ.get("HF_TOKEN")
 if not HF_TOKEN:
     st.error("Hugging Face API token not found. Set HF_TOKEN in environment variables.")
@@ -12,17 +12,17 @@ if not HF_TOKEN:
 
 client = InferenceClient(api_key=HF_TOKEN)
 
-# ------------------- Streamlit App -------------------
+# ---------------- Streamlit App ----------------
 st.set_page_config(page_title="LinkedIn Profile Builder", layout="wide")
 st.title("AI LinkedIn Profile Builder")
 
 tab1, tab2 = st.tabs(["Beautify Headshot", "Create LinkedIn Banner"])
 
-# ------------------- Tab 1: Beautify Headshot -------------------
+# ---------------- Tab 1: Beautify Headshot ----------------
 with tab1:
     st.header("Upload your headshot to beautify")
     uploaded_file = st.file_uploader("Upload a photo", type=["png", "jpg", "jpeg"])
-    
+
     if uploaded_file:
         img = Image.open(uploaded_file)
         st.image(img, caption="Original Headshot", use_column_width=True)
@@ -30,15 +30,14 @@ with tab1:
         if st.button("Beautify Headshot"):
             with st.spinner("Beautifying your photo..."):
                 try:
-                    # Convert uploaded file to bytes
                     uploaded_file.seek(0)
                     img_bytes = uploaded_file.read()
 
-                    # Use a working image-to-image model
+                    # Public model for image-to-image
                     output_image = client.image_to_image(
                         image=img_bytes,
                         prompt="Professional LinkedIn headshot, realistic, well-lit, friendly",
-                        model="runwayml/stable-diffusion-v1-5",
+                        model="stabilityai/stable-diffusion-2-1",
                     )
 
                     st.image(output_image, caption="Beautified Headshot", use_column_width=True)
@@ -56,7 +55,7 @@ with tab1:
                 except Exception as e:
                     st.error(f"Error: {e}")
 
-# ------------------- Tab 2: Create LinkedIn Banner -------------------
+# ---------------- Tab 2: Create LinkedIn Banner ----------------
 with tab2:
     st.header("Generate a LinkedIn Banner from Text")
     prompt = st.text_area(
