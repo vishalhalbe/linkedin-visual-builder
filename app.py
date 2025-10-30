@@ -1,44 +1,22 @@
+import os
 import streamlit as st
-import requests
+from huggingface_hub import InferenceClient
 from PIL import Image
 from io import BytesIO
 
-# Load your Hugging Face API token from Streamlit secrets
-API_TOKEN = "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"
+# Ensure HF_TOKEN is set in environment variables
+HF_TOKEN = os.environ.get("HF_TOKEN")
+if not HF_TOKEN:
+    st.error("Hugging Face API token not found. Set HF_TOKEN in environment variables.")
+    st.stop()
 
-HEADSHOT_MODEL = "valiantcat/Qwen-Image-Edit-MeiTu"  # Image-to-image beautify
-BANNER_MODEL = "stabilityai/stable-diffusion-2"      # Text-to-image banner generation
-
-HEADSHOT_API_URL = f"https://api-inference.huggingface.co/models/{HEADSHOT_MODEL}"
-BANNER_API_URL = f"https://api-inference.huggingface.co/models/{BANNER_MODEL}"
-
-headers = {"Authorization": f"Bearer {API_TOKEN}"}
-
-def query_image_edit(image_bytes):
-    payload = {
-        "inputs": image_bytes,
-        "options": {"wait_for_model": True}
-    }
-    response = requests.post(HEADSHOT_API_URL, headers=headers, data=image_bytes)
-    if response.status_code == 200:
-        return Image.open(BytesIO(response.content))
-    else:
-        st.error(f"Headshot beautify failed: {response.status_code} - {response.text}")
-        return None
-
-def query_text_to_image(prompt):
-    payload = {"inputs": prompt, "options": {"wait_for_model": True}}
-    response = requests.post(BANNER_API_URL, headers=headers, json=payload)
-    if response.status_code == 200:
-        return Image.open(BytesIO(response.content))
-    else:
-        st.error(f"Banner generation failed: {response.status_code} - {response.text}")
-        return None
+client = InferenceClient(api_key=HF_TOKEN)
 
 st.title("AI LinkedIn Profile Enhancer")
 
 tab1, tab2 = st.tabs(["Beautify Headshot", "Create LinkedIn Banner"])
 
+# -------------------- Tab 1: Beautify Headshot --------------------
 with tab1:
     st.header("Upload your headshot to beautify")
     uploaded_file = st.file_uploader("Upload a photo", type=["png", "jpg", "jpeg"])
@@ -48,21 +26,39 @@ with tab1:
 
         if st.button("Beautify Headshot"):
             with st.spinner("Beautifying your photo..."):
-                img_bytes = uploaded_file.read()
-                result_img = query_image_edit(img_bytes)
-                if result_img:
-                    st.image(result_img, caption="Beautified Headshot", use_column_width=True)
+                input_bytes = uploaded_file.read()
+                try:
+                    # Replace with a public image-to-image model
+                    output_image = client.image_to_image(
+                        input_image=input_bytes,
+                        prompt="Professional LinkedIn headshot, well-lit, realistic",
+                        model="runwayml/stable-diffusion-v1-5",
+                    )
+                    st.image(output_image, caption="Beautified Headshot", use_column_width=True)
+                except Exception as e:
+                    st.error(f"Error: {e}")
 
+# -------------------- Tab 2: Create LinkedIn Banner --------------------
 with tab2:
     st.header("Generate a LinkedIn Banner from Text")
-    prompt = st.text_area("Describe your ideal LinkedIn banner:", height=100,
-                          placeholder="E.g., professional corporate banner with blue tones and modern design")
+    prompt = st.text_area(
+        "Describe your ideal LinkedIn banner:",
+        height=100,
+        placeholder="E.g., professional corporate banner with blue tones and modern design"
+    )
+
     if st.button("Generate Banner"):
         if not prompt.strip():
             st.warning("Please enter a prompt.")
         else:
             with st.spinner("Generating your LinkedIn banner..."):
-                banner_img = query_text_to_image(prompt.strip())
-                if banner_img:
-                    st.image(banner_img, caption="Generated LinkedIn Banner", use_column_width=True)
-
+                try:
+                    output_image = client.text_to_image(
+                        prompt=prompt.strip(),
+                        model="stabilityai/stable-diffusion-2-1",
+                        width=1200,   # Banner width
+                        height=300    # Banner height
+                    )
+                    st.image(output_image, caption="Generated LinkedIn Banner", use_column_width=True)
+                except Exception as e:
+                    st.error(f"Error: {e}")
