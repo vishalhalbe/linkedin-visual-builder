@@ -2,3 +2,6 @@ streamlit
 pillow
 requests
 huggingface-hub
+diffusers[torch]
+transformers
+torch
