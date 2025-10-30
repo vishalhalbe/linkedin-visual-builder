@@ -1,110 +1,67 @@
 import streamlit as st
 import requests
-from io import BytesIO
 from PIL import Image
-import base64
+from io import BytesIO
 
-# Function to call Hugging Face API and generate image
-def generate_image(prompt, hf_token):
-    url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
-    headers = {"Authorization": f"Bearer {hf_token}"}
-    payload = {"inputs": prompt}
+# Load your Hugging Face API token from Streamlit secrets
+API_TOKEN = st.secrets["huggingface"]["api_token"]
 
-    try:
-        response = requests.post(url, headers=headers, json=payload, timeout=180)
-        if response.status_code == 200:
-            return Image.open(BytesIO(response.content))
+HEADSHOT_MODEL = "valiantcat/Qwen-Image-Edit-MeiTu"  # Image-to-image beautify
+BANNER_MODEL = "stabilityai/stable-diffusion-2"      # Text-to-image banner generation
+
+HEADSHOT_API_URL = f"https://api-inference.huggingface.co/models/{HEADSHOT_MODEL}"
+BANNER_API_URL = f"https://api-inference.huggingface.co/models/{BANNER_MODEL}"
+
+headers = {"Authorization": f"Bearer {API_TOKEN}"}
+
+def query_image_edit(image_bytes):
+    payload = {
+        "inputs": image_bytes,
+        "options": {"wait_for_model": True}
+    }
+    response = requests.post(HEADSHOT_API_URL, headers=headers, data=image_bytes)
+    if response.status_code == 200:
+        return Image.open(BytesIO(response.content))
+    else:
+        st.error(f"Headshot beautify failed: {response.status_code} - {response.text}")
+        return None
+
+def query_text_to_image(prompt):
+    payload = {"inputs": prompt, "options": {"wait_for_model": True}}
+    response = requests.post(BANNER_API_URL, headers=headers, json=payload)
+    if response.status_code == 200:
+        return Image.open(BytesIO(response.content))
+    else:
+        st.error(f"Banner generation failed: {response.status_code} - {response.text}")
+        return None
+
+st.title("AI LinkedIn Profile Enhancer")
+
+tab1, tab2 = st.tabs(["Beautify Headshot", "Create LinkedIn Banner"])
+
+with tab1:
+    st.header("Upload your headshot to beautify")
+    uploaded_file = st.file_uploader("Upload a photo", type=["png", "jpg", "jpeg"])
+    if uploaded_file:
+        img = Image.open(uploaded_file)
+        st.image(img, caption="Original Headshot", use_column_width=True)
+
+        if st.button("Beautify Headshot"):
+            with st.spinner("Beautifying your photo..."):
+                img_bytes = uploaded_file.read()
+                result_img = query_image_edit(img_bytes)
+                if result_img:
+                    st.image(result_img, caption="Beautified Headshot", use_column_width=True)
+
+with tab2:
+    st.header("Generate a LinkedIn Banner from Text")
+    prompt = st.text_area("Describe your ideal LinkedIn banner:", height=100,
+                          placeholder="E.g., professional corporate banner with blue tones and modern design")
+    if st.button("Generate Banner"):
+        if not prompt.strip():
+            st.warning("Please enter a prompt.")
         else:
-            st.error(f"⚠️ Generation failed (status {response.status_code}). {response.text}")
-    except requests.exceptions.RequestException as e:
-        st.error(f"⚠️ Request error: {e}")
-    return None
-
-# Helper to convert PIL image to downloadable bytes
-def image_to_bytes(img, format="PNG"):
-    buf = BytesIO()
-    img.save(buf, format=format)
-    byte_im = buf.getvalue()
-    return byte_im
-
-# Helper to generate download link
-def get_download_link(img, filename):
-    img_bytes = image_to_bytes(img)
-    b64 = base64.b64encode(img_bytes).decode()
-    href = f'<a href="data:file/png;base64,{b64}" download="{filename}">⬇️ Download {filename}</a>'
-    return href
-
-# Main Streamlit app
-def main():
-    st.set_page_config(page_title="LinkedIn Profile Image & Banner Generator", layout="wide")
-    st.title("🚀 LinkedIn Profile Headshot & Banner Image Generator")
-
-    with st.sidebar:
-        st.header("🎨 Customize Your Style")
-        profession = st.selectbox(
-            "Select Profession / Style:",
-            ["Corporate / Consultant", "Creative / Designer", "Tech / Developer", "Education / Tutor", "Entrepreneur / Founder"]
-        )
-        brand_color = st.color_picker("Choose Brand / Accent Color:", "#0a47f9")
-        headshot_file = st.file_uploader("Upload Your Headshot (optional)", type=["jpg", "jpeg", "png"])
-        hf_token = st.text_input(
-            "Hugging Face API Token (Get free token from https://huggingface.co/settings/tokens)",
-            type="password"
-        )
-
-    if not hf_token:
-        st.warning("Please enter your Hugging Face API token to generate images.")
-        st.stop()
-
-    # Compose prompts based on inputs
-    style_prompts = {
-        "Corporate / Consultant": "professional corporate headshot, clean background, business attire",
-        "Creative / Designer": "creative professional headshot, artistic background, colorful style",
-        "Tech / Developer": "tech professional headshot, modern style, casual attire",
-        "Education / Tutor": "friendly professional headshot, soft background, approachable look",
-        "Entrepreneur / Founder": "dynamic professional headshot, confident pose, modern business style"
-    }
-
-    banner_prompts = {
-        "Corporate / Consultant": f"professional LinkedIn banner with blue and white colors, clean corporate design, business theme, accent color {brand_color}",
-        "Creative / Designer": f"colorful LinkedIn banner with artistic design, creative elements, accent color {brand_color}",
-        "Tech / Developer": f"modern LinkedIn banner with tech symbols and digital theme, accent color {brand_color}",
-        "Education / Tutor": f"educational LinkedIn banner with books and light background, accent color {brand_color}",
-        "Entrepreneur / Founder": f"dynamic LinkedIn banner with startup and business growth elements, accent color {brand_color}"
-    }
-
-    headshot_prompt = style_prompts.get(profession, "professional headshot") + ", high resolution, realistic, studio lighting"
-    banner_prompt = banner_prompts.get(profession, "professional LinkedIn banner") + ", high resolution, clean design, 1584x396 px"
-
-    # If user uploaded a headshot, mention it in prompt (optional enhancement)
-    if headshot_file:
-        st.info("Uploaded headshot detected — using it as inspiration for the generated headshot.")
-        # Currently the model API call doesn't support image input directly.
-        # You could extend this with image-to-image pipelines or custom model.
-        # For now we just mention it in prompt for creativity.
-        headshot_prompt += ", inspired by uploaded photo"
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.header("✨ Generate Headshot")
-        if st.button("Generate Headshot"):
-            with st.spinner("Generating headshot... ⏳"):
-                headshot_img = generate_image(headshot_prompt, hf_token)
-                if headshot_img:
-                    st.image(headshot_img, caption="Generated Headshot", use_column_width=True)
-                    st.markdown(get_download_link(headshot_img, "linkedin_headshot.png"), unsafe_allow_html=True)
-
-    with col2:
-        st.header("🎨 Generate Banner")
-        if st.button("Generate Banner"):
-            with st.spinner("Generating banner... ⏳"):
-                banner_img = generate_image(banner_prompt, hf_token)
+            with st.spinner("Generating your LinkedIn banner..."):
+                banner_img = query_text_to_image(prompt.strip())
                 if banner_img:
-                    # Resize banner to LinkedIn recommended size (1584x396 px)
-                    banner_img = banner_img.resize((1584, 396))
-                    st.image(banner_img, caption="Generated Banner", use_column_width=True)
-                    st.markdown(get_download_link(banner_img, "linkedin_banner.png"), unsafe_allow_html=True)
-
-if __name__ == "__main__":
-    main()
+                    st.image(banner_img, caption="Generated LinkedIn Banner", use_column_width=True)
