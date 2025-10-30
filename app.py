@@ -1,17 +1,16 @@
 import streamlit as st
-from PIL import Image
+from PIL import Image, ImageDraw, ImageOps
 import requests
 from io import BytesIO
 import os
 
 # -------------------------------
-# PAGE CONFIGURATION
+# PAGE CONFIG
 # -------------------------------
 st.set_page_config(page_title="LinkedIn Visual Builder", layout="wide")
 st.title("🌟 LinkedIn Visual Builder (Free AI Edition)")
-st.markdown(
-    "Easily create **professional LinkedIn headshots and banners** following 2025 design best practices — all with free AI tools."
-)
+st.markdown("Create professional **LinkedIn headshots and banners** — with built-in **profile preview** for desktop and mobile layouts.")
+
 st.markdown("---")
 
 # -------------------------------
@@ -43,15 +42,12 @@ hf_token = st.sidebar.text_input(
     type="password",
 )
 if not hf_token:
-    # Fallback to Streamlit secret if deployed on Streamlit Cloud
-    hf_token = os.environ.get("HF_TOKEN")
+    hf_token = os.environ.get("HF_TOKEN")  # For Streamlit Cloud secret storage
 
-st.sidebar.markdown(
-    "📘 **Tip:** Free Hugging Face accounts allow limited image generations daily."
-)
+st.sidebar.markdown("📘 Free Hugging Face accounts allow limited daily image generations.")
 
 # -------------------------------
-# PROMPTS (headshot + banner)
+# PROMPTS
 # -------------------------------
 prompts = {
     "Corporate / Consultant": {
@@ -95,7 +91,6 @@ prompts = {
 # FUNCTION: Generate image via Hugging Face API
 # -------------------------------
 def generate_image(prompt, hf_token):
-    """Call Hugging Face Stable Diffusion API to generate an image."""
     url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2"
     headers = {"Authorization": f"Bearer {hf_token}"}
     payload = {"inputs": prompt}
@@ -109,34 +104,70 @@ def generate_image(prompt, hf_token):
 
 
 # -------------------------------
+# FUNCTION: Create circular crop
+# -------------------------------
+def circular_crop(img, size=300):
+    """Crop image into a circle and resize."""
+    img = img.resize((size, size))
+    mask = Image.new("L", (size, size), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.ellipse((0, 0, size, size), fill=255)
+    result = ImageOps.fit(img, mask.size, centering=(0.5, 0.5))
+    result.putalpha(mask)
+    return result
+
+
+# -------------------------------
+# FUNCTION: Create LinkedIn Preview (Desktop + Mobile)
+# -------------------------------
+def create_linkedin_preview(banner, headshot):
+    """Overlay headshot on banner to simulate LinkedIn layout (desktop & mobile)."""
+    desktop_banner = banner.copy().resize((1584, 396))
+    mobile_banner = banner.copy().resize((800, 450))
+
+    headshot_circ = circular_crop(headshot, 220)
+
+    # Create transparent overlays
+    desktop_preview = desktop_banner.convert("RGBA")
+    mobile_preview = mobile_banner.convert("RGBA")
+
+    # Overlay headshot (approx LinkedIn placement)
+    desktop_preview.paste(headshot_circ, (60, 240), headshot_circ)
+    mobile_preview.paste(headshot_circ, (290, 280), headshot_circ)
+
+    return desktop_preview, mobile_preview
+
+
+# -------------------------------
 # LAYOUT
 # -------------------------------
 col1, col2 = st.columns(2)
 
+head_img = None
+banner_img = None
+
 # ===== HEADSHOT =====
 with col1:
     st.subheader("👤 Profile Photo")
-
     if uploaded_file:
-        img = Image.open(uploaded_file).convert("RGB")
-        st.image(img, caption="Uploaded Headshot", use_column_width=True)
-    else:
-        if st.button("✨ Generate AI Headshot"):
-            if not hf_token:
-                st.warning("⚠️ Please enter or set your Hugging Face token.")
-            else:
-                st.info("Generating your professional headshot... please wait ⏳")
-                head_img = generate_image(prompts[profession]["headshot"], hf_token)
-                if head_img:
-                    st.image(head_img, caption="AI-Generated Headshot", use_column_width=True)
-                    buf = BytesIO()
-                    head_img.save(buf, format="PNG")
-                    st.download_button(
-                        "⬇️ Download Headshot",
-                        data=buf.getvalue(),
-                        file_name="linkedin_headshot.png",
-                        mime="image/png",
-                    )
+        head_img = Image.open(uploaded_file).convert("RGB")
+        st.image(head_img, caption="Uploaded Headshot", use_column_width=True)
+    elif st.button("✨ Generate AI Headshot"):
+        if not hf_token:
+            st.warning("⚠️ Please enter or set your Hugging Face token.")
+        else:
+            st.info("Generating your professional headshot... please wait ⏳")
+            head_img = generate_image(prompts[profession]["headshot"], hf_token)
+            if head_img:
+                st.image(head_img, caption="AI-Generated Headshot", use_column_width=True)
+                buf = BytesIO()
+                head_img.save(buf, format="PNG")
+                st.download_button(
+                    "⬇️ Download Headshot",
+                    data=buf.getvalue(),
+                    file_name="linkedin_headshot.png",
+                    mime="image/png",
+                )
 
 # ===== BANNER =====
 with col2:
@@ -145,7 +176,7 @@ with col2:
         if not hf_token:
             st.warning("⚠️ Please enter or set your Hugging Face token.")
         else:
-            st.info("Generating your LinkedIn banner... this can take 20–40 seconds ⏳")
+            st.info("Generating your LinkedIn banner... please wait ⏳")
             banner_img = generate_image(prompts[profession]["banner"], hf_token)
             if banner_img:
                 st.image(banner_img, caption="AI-Generated Banner", use_column_width=True)
@@ -158,12 +189,10 @@ with col2:
                     mime="image/png",
                 )
 
-# -------------------------------
-# BOTH IMAGES TOGETHER
-# -------------------------------
+# ===== GENERATE BOTH =====
 st.markdown("---")
-st.subheader("🧩 Optional: Generate Both at Once")
-if st.button("🚀 Generate Headshot + Banner"):
+st.subheader("🚀 Generate Both at Once")
+if st.button("✨ Generate Headshot + Banner"):
     if not hf_token:
         st.warning("⚠️ Please enter your Hugging Face token.")
     else:
@@ -171,20 +200,47 @@ if st.button("🚀 Generate Headshot + Banner"):
         head_img = generate_image(prompts[profession]["headshot"], hf_token)
         banner_img = generate_image(prompts[profession]["banner"], hf_token)
         if head_img and banner_img:
+            st.success("✅ Both images generated successfully!")
             c1, c2 = st.columns(2)
             with c1:
                 st.image(head_img, caption="AI Headshot", use_column_width=True)
             with c2:
                 st.image(banner_img, caption="AI Banner", use_column_width=True)
-            st.success("✅ Both images generated successfully!")
 
 # -------------------------------
-# PROMPT DETAILS
+# LINKEDIN PREVIEW
+# -------------------------------
+if head_img and banner_img:
+    st.markdown("---")
+    st.subheader("👀 LinkedIn Preview Mode (Desktop & Mobile)")
+
+    desktop_preview, mobile_preview = create_linkedin_preview(banner_img, head_img)
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.image(desktop_preview, caption="💻 Desktop Preview", use_column_width=True)
+    with col_b:
+        st.image(mobile_preview, caption="📱 Mobile Preview", use_column_width=True)
+
+    # Download combined previews
+    buf = BytesIO()
+    desktop_preview.save(buf, format="PNG")
+    st.download_button(
+        "⬇️ Download Desktop Preview",
+        data=buf.getvalue(),
+        file_name="linkedin_desktop_preview.png",
+        mime="image/png",
+    )
+
+# -------------------------------
+# PROMPTS
 # -------------------------------
 st.markdown("---")
-st.subheader("🧠 AI Prompt Details (for transparency or custom editing)")
+st.subheader("🧠 AI Prompt Details (for transparency or editing)")
 st.text_area("Headshot Prompt", prompts[profession]["headshot"], height=80)
 st.text_area("Banner Prompt", prompts[profession]["banner"], height=80)
 
 st.markdown("---")
-st.caption("⚙️ Built with Streamlit + Hugging Face Stable Diffusion 2 • Created with GPT-5 • 2025 LinkedIn Visual Best Practices")
+st.caption(
+    "⚙️ Built with Streamlit + Hugging Face Stable Diffusion 2 • Created with GPT-5 • Includes LinkedIn Preview Mode"
+)
