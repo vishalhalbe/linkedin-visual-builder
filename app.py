@@ -24,33 +24,40 @@ with tab1:
     uploaded_file = st.file_uploader("Upload a photo", type=["png", "jpg", "jpeg"])
 
     if uploaded_file:
-        img = Image.open(uploaded_file)
-        st.image(img, caption="Original Headshot", use_column_width=True)
+        try:
+            img = Image.open(uploaded_file)
+            st.image(img, caption="Original Headshot",  width=250)
+        except:
+            st.error("Cannot open image. Please upload a valid image file.")
+            uploaded_file = None
 
-        if st.button("Beautify Headshot"):
+        if uploaded_file and st.button("Beautify Headshot"):
             with st.spinner("Beautifying your photo..."):
                 try:
                     uploaded_file.seek(0)
                     img_bytes = uploaded_file.read()
 
-                    # Public model for image-to-image
+                    # Using public image-to-image model
                     output_image = client.image_to_image(
                         image=img_bytes,
                         prompt="Professional LinkedIn headshot, realistic, well-lit, friendly",
-                        model="stabilityai/stable-diffusion-2-1",
+                        model="stabilityai/stable-diffusion-2-inpainting"
                     )
 
-                    st.image(output_image, caption="Beautified Headshot", use_column_width=True)
+                    if output_image is None:
+                        st.error("Model did not return an image. Try again or check the model.")
+                    else:
+                        st.image(output_image, caption="Beautified Headshot", use_column_width=True)
 
-                    # Download button
-                    buf = BytesIO()
-                    output_image.save(buf, format="PNG")
-                    st.download_button(
-                        label="Download Beautified Headshot",
-                        data=buf.getvalue(),
-                        file_name="beautified_headshot.png",
-                        mime="image/png"
-                    )
+                        # Download button
+                        buf = BytesIO()
+                        output_image.save(buf, format="PNG")
+                        st.download_button(
+                            label="Download Beautified Headshot",
+                            data=buf.getvalue(),
+                            file_name="beautified_headshot.png",
+                            mime="image/png"
+                        )
 
                 except Exception as e:
                     st.error(f"Error: {e}")
@@ -77,17 +84,20 @@ with tab2:
                         height=300
                     )
 
-                    st.image(output_image, caption="Generated LinkedIn Banner", use_column_width=True)
+                    if output_image is None:
+                        st.error("Model did not return an image. Try again.")
+                    else:
+                        st.image(output_image, caption="Generated LinkedIn Banner", use_column_width=True)
 
-                    # Download button
-                    buf = BytesIO()
-                    output_image.save(buf, format="PNG")
-                    st.download_button(
-                        label="Download LinkedIn Banner",
-                        data=buf.getvalue(),
-                        file_name="linkedin_banner.png",
-                        mime="image/png"
-                    )
+                        # Download button
+                        buf = BytesIO()
+                        output_image.save(buf, format="PNG")
+                        st.download_button(
+                            label="Download LinkedIn Banner",
+                            data=buf.getvalue(),
+                            file_name="linkedin_banner.png",
+                            mime="image/png"
+                        )
 
                 except Exception as e:
                     st.error(f"Error: {e}")
